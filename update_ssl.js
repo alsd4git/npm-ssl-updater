@@ -7,18 +7,18 @@ const packageJson = require("./package.json");
 
 program
   .name("npm-ssl-updater")
-  .description("Abilita Force SSL, HTTP/2, HSTS e altre opzioni su Nginx Proxy Manager")
+  .description("Enables Force SSL, HTTP/2, HSTS, and other options on Nginx Proxy Manager")
   .version(packageJson.version)
-  .option('-H, --host <url>', 'Indirizzo di NPM (es: http://localhost:81)')
-  .option('-e, --email <email>', 'Email admin NPM')
-  .option('-p, --password <password>', 'Password admin NPM')
-  .option('--hsts-subdomains, --hsd', 'Abilita HSTS anche per i sottodomini', false)
-  .option('--cache-assets, --ca', 'Abilita cache degli asset statici')
-  .option('--block-exploits, --bce', 'Blocca exploit comuni')
-  .option('--enable-websockets, --ws', 'Abilita supporto WebSocket')
-  .option('--dry-run', 'Mostra cosa cambierebbe senza applicare modifiche', false)
-  .option('--print-advanced', 'Mostra la sezione advanced_config per ciascun host', false)
-  .option('-l, --list-domains', 'Mostra la lista dei domini configurati e dove puntano', false)
+  .option('-H, --host <url>', 'NPM address (e.g., http://localhost:81)')
+  .option('-e, --email <email>', 'NPM admin email')
+  .option('-p, --password <password>', 'NPM admin password')
+  .option('--hsts-subdomains, --hsd', 'Enable HSTS for subdomains as well', false)
+  .option('--cache-assets, --ca', 'Enable static asset caching')
+  .option('--block-exploits, --bce', 'Block common exploits')
+  .option('--enable-websockets, --ws', 'Enable WebSocket support')
+  .option('--dry-run', 'Show what would change without applying modifications', false)
+  .option('--print-advanced', 'Show the advanced_config section for each host', false)
+  .option('-l, --list-domains', 'Show a list of configured domains and their targets', false)
   .parse(process.argv);
 
 const opts = program.opts();
@@ -29,13 +29,13 @@ const envEmail = process.env.NPM_EMAIL;
 const envPassword = process.env.NPM_PASSWORD;
 
 if (opts.host && envHost && opts.host !== envHost) {
-  console.warn("⚠️ Il parametro --host è diverso da NPM_HOST nel file .env.");
+  console.warn("⚠️ The --host parameter differs from NPM_HOST in the .env file.");
 }
 if (opts.email && envEmail && opts.email !== envEmail) {
-  console.warn("⚠️ Il parametro --email è diverso da NPM_EMAIL nel file .env.");
+  console.warn("⚠️ The --email parameter differs from NPM_EMAIL in the .env file.");
 }
 if (opts.password && envPassword && opts.password !== envPassword) {
-  console.warn("⚠️ Il parametro --password è diverso da NPM_PASSWORD nel file .env.");
+  console.warn("⚠️ The --password parameter differs from NPM_PASSWORD in the .env file.");
 }
 
 opts.host = opts.host || envHost;
@@ -43,7 +43,7 @@ opts.email = opts.email || envEmail;
 opts.password = opts.password || envPassword;
 
 if (!opts.host || !opts.email || !opts.password) {
-  console.error("❌ Errore: Host, email e password sono obbligatori. Forniscili tramite linea di comando o file .env.");
+  console.error("❌ Error: Host, email, and password are required. Provide them via command line or .env file.");
   program.help();
   process.exit(1);
 }
@@ -88,7 +88,7 @@ function printDiff(before, after) {
 }
 
 function listDomains(proxyHosts) {
-  console.log("📄 Lista dei domini configurati:");
+  console.log("📄 List of configured domains:");
   console.log("--------------------------------------------------");
   for (const host of proxyHosts) {
     const domains = host.domain_names.join(", ");
@@ -111,7 +111,7 @@ async function main() {
     const proxyHosts = proxyRes.data;
 
     if (!proxyHosts.length) {
-      console.log("❗ Nessun proxy host trovato.");
+      console.log("❗ No proxy hosts found.");
       return;
     }
 
@@ -128,7 +128,7 @@ async function main() {
       if (opts.printAdvanced) {
         console.log(`\n📄 Advanced config for: ${domain_names.join(", ")}`);
         console.log("--------------------------------------------------");
-        console.log(host.advanced_config || "<vuoto>");
+        console.log(host.advanced_config || "<empty>");
         console.log("--------------------------------------------------");
         continue;
       }
@@ -165,7 +165,7 @@ async function main() {
       });
 
       if (!willChange) {
-        console.log(`✅ ${domain_names.join(", ")} è già configurato correttamente.`);
+        console.log(`✅ ${domain_names.join(", ")} is already correctly configured.`);
         continue;
       }
 
@@ -173,7 +173,7 @@ async function main() {
       printDiff(host, updated);
 
       if (opts.dryRun) {
-        console.log("   → Modalità dry-run: nessuna modifica applicata.");
+        console.log("   → Dry-run mode: no changes applied.");
         continue;
       }
 
@@ -181,15 +181,15 @@ async function main() {
         const answer = await inquirer.prompt([{
           type: 'input',
           name: 'confirm',
-          message: 'Applico modifiche? ([s]ì / [n]o / [t]utti)',
-          validate: input => ['s', 'n', 't'].includes(input.toLowerCase()) || 'Rispondi con s / n / t'
+          message: 'Apply changes? ([y]es / [n]o / [a]ll)',
+          validate: input => ['y', 'n', 'a'].includes(input.toLowerCase()) || 'Respond with y / n / a'
         }]);
 
         const input = answer.confirm.toLowerCase();
         if (input === 'n') {
-          console.log("   → ❌ Saltato.");
+          console.log("   → ❌ Skipped.");
           continue;
-        } else if (input === 't') {
+        } else if (input === 'a') {
           applyToAll = true;
         }
       }
@@ -218,15 +218,15 @@ async function main() {
 
       try {
         await axios.put(`${opts.host}/api/nginx/proxy-hosts/${id}`, updatePayload, { headers });
-        console.log("   → ✅ Modifica applicata");
+        console.log("   → ✅ Change applied");
       } catch (err) {
-        console.warn("   → ⚠️ Errore durante update:", err.message);
+        console.warn("   → ⚠️ Error during update:", err.message);
       }
     }
 
-    console.log("\n✅ Script completato.");
+    console.log("\n✅ Script completed.");
   } catch (err) {
-    console.error("❌ Errore generale:", err.response?.data || err.message);
+    console.error("❌ General error:", err.response?.data || err.message);
     process.exit(1);
   }
 }
