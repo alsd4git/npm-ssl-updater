@@ -28,8 +28,15 @@ npm-ssl-updater \
   --hsts-subdomains \
   --cache-assets \
   --block-exploits \
-  --enable-websockets
+  --enable-websockets \
+  --print-advanced # (opzionale) mostra la configurazione avanzata
 ```
+
+Alias disponibili per i flag:
+- `--hsts-subdomains`: `--hsd`
+- `--cache-assets`: `--ca`
+- `--block-exploits`: `--bce`
+- `--enable-websockets`: `--ws`
 
 ### Solo visualizzazione (dry-run)
 
