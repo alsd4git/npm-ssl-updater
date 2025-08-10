@@ -1,5 +1,7 @@
 # 🔐 npm-ssl-updater
 
+[English version](README.en.md)
+
 > Aggiorna automaticamente le impostazioni di sicurezza per tutti i proxy host configurati in [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager).
 
 ## 📦 Installazione
@@ -31,6 +33,8 @@ NPM_PASSWORD=changeme
 Se il file `.env` è presente, non è necessario passare i flag `--host`, `--email` e `--password`.
 
 **Nota:** I flag passati da linea di comando hanno la precedenza sulle variabili d'ambiente.
+
+**Importante:** Se lo strumento è installato globalmente, il file `.env` deve trovarsi nella directory da cui si esegue il comando `npm-ssl-updater`.
 
 ### Elenco dei domini
 
@@ -127,7 +131,7 @@ Applico modifiche? ([s]ì / [n]o / [t]utti): s
 
 ---
 
-## 🛡️ Licenza
+## 📃 Licenza
 
 MIT License - Fai quello che vuoi, ma linka l'autore :)
 © [Alessandro Digilio](https://github.com/alsd4git)
