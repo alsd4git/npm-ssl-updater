@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-
+require('dotenv').config();
 const axios = require("axios");
 const { program } = require("commander");
 const inquirer = require("inquirer");
@@ -9,9 +9,9 @@ program
   .name("npm-ssl-updater")
   .description("Abilita Force SSL, HTTP/2, HSTS e altre opzioni su Nginx Proxy Manager")
   .version(packageJson.version)
-  .requiredOption('-H, --host <url>', 'Indirizzo di NPM (es: http://localhost:81)')
-  .requiredOption('-e, --email <email>', 'Email admin NPM')
-  .requiredOption('-p, --password <password>', 'Password admin NPM')
+  .option('-H, --host <url>', 'Indirizzo di NPM (es: http://localhost:81)')
+  .option('-e, --email <email>', 'Email admin NPM')
+  .option('-p, --password <password>', 'Password admin NPM')
   .option('--hsts-subdomains, --hsd', 'Abilita HSTS anche per i sottodomini', false)
   .option('--cache-assets, --ca', 'Abilita cache degli asset statici')
   .option('--block-exploits, --bce', 'Blocca exploit comuni')
@@ -20,11 +20,38 @@ program
   .option('--print-advanced', 'Mostra la sezione advanced_config per ciascun host', false)
   .parse(process.argv);
 
-if (process.argv.length <= 2) {
+const opts = program.opts();
+
+// Environment variable handling
+const envHost = process.env.NPM_HOST;
+const envEmail = process.env.NPM_EMAIL;
+const envPassword = process.env.NPM_PASSWORD;
+
+if (opts.host && envHost && opts.host !== envHost) {
+  console.warn("⚠️ Il parametro --host è diverso da NPM_HOST nel file .env.");
+}
+if (opts.email && envEmail && opts.email !== envEmail) {
+  console.warn("⚠️ Il parametro --email è diverso da NPM_EMAIL nel file .env.");
+}
+if (opts.password && envPassword && opts.password !== envPassword) {
+  console.warn("⚠️ Il parametro --password è diverso da NPM_PASSWORD nel file .env.");
+}
+
+opts.host = opts.host || envHost;
+opts.email = opts.email || envEmail;
+opts.password = opts.password || envPassword;
+
+if (!opts.host || !opts.email || !opts.password) {
+  console.error("❌ Errore: Host, email e password sono obbligatori. Forniscili tramite linea di comando o file .env.");
+  program.help();
+  process.exit(1);
+}
+
+if (process.argv.length <= 2 && !envHost && !envEmail && !envPassword) {
   program.help();
 }
 
-const opts = program.opts();
+//const opts = program.opts();
 
 const blockExploitsExceptions = [
   'tinyauth',

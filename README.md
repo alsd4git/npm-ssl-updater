@@ -18,6 +18,20 @@ npm install -g .
 
 ## 🚀 Uso
 
+### Variabili d'ambiente
+
+È possibile creare un file `.env` nella root del progetto per memorizzare le credenziali:
+
+```
+NPM_HOST=http://localhost:81
+NPM_EMAIL=admin@example.com
+NPM_PASSWORD=changeme
+```
+
+Se il file `.env` è presente, non è necessario passare i flag `--host`, `--email` e `--password`.
+
+**Nota:** I flag passati da linea di comando hanno la precedenza sulle variabili d'ambiente.
+
 ### Modalità interattiva (tutti i flag disponibili)
 
 ```bash
@@ -31,6 +45,7 @@ npm-ssl-updater \
   --enable-websockets \
   --print-advanced # (opzionale) mostra la configurazione avanzata
 ```
+
 
 Alias disponibili per i flag:
 - `--hsts-subdomains`: `--hsd`
