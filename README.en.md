@@ -1,6 +1,6 @@
 # 🔐 npm-ssl-updater
 
-[Versione italiana](README.md)
+[Versione italiana](README.it.md)
 
 > Automatically updates security settings for all configured proxy hosts in [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager).
 
