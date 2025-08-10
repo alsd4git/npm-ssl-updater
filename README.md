@@ -32,6 +32,16 @@ Se il file `.env` è presente, non è necessario passare i flag `--host`, `--ema
 
 **Nota:** I flag passati da linea di comando hanno la precedenza sulle variabili d'ambiente.
 
+### Elenco dei domini
+
+Eseguendo lo script senza alcun argomento, verrà mostrata la lista di tutti i domini configurati e la loro destinazione (forward).
+
+```bash
+npm-ssl-updater
+```
+
+Questo è il comportamento predefinito. È anche possibile usare i flag `--list-domains` o `-l` per ottenere lo stesso risultato.
+
 ### Modalità interattiva (tutti i flag disponibili)
 
 ```bash
@@ -48,6 +58,7 @@ npm-ssl-updater \
 
 
 Alias disponibili per i flag:
+- `-l`, `--list-domains`: mostra la lista dei domini configurati
 - `--hsts-subdomains`: `--hsd`
 - `--cache-assets`: `--ca`
 - `--block-exploits`: `--bce`

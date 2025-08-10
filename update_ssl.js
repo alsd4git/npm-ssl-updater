@@ -18,6 +18,7 @@ program
   .option('--enable-websockets, --ws', 'Abilita supporto WebSocket')
   .option('--dry-run', 'Mostra cosa cambierebbe senza applicare modifiche', false)
   .option('--print-advanced', 'Mostra la sezione advanced_config per ciascun host', false)
+  .option('-l, --list-domains', 'Mostra la lista dei domini configurati e dove puntano', false)
   .parse(process.argv);
 
 const opts = program.opts();
@@ -86,6 +87,17 @@ function printDiff(before, after) {
   }
 }
 
+function listDomains(proxyHosts) {
+  console.log("📄 Lista dei domini configurati:");
+  console.log("--------------------------------------------------");
+  for (const host of proxyHosts) {
+    const domains = host.domain_names.join(", ");
+    const forward = `${host.forward_host}:${host.forward_port}`;
+    console.log(`  • ${domains} → ${forward}`);
+  }
+  console.log("--------------------------------------------------");
+}
+
 async function main() {
   try {
     const loginRes = await axios.post(`${opts.host}/api/tokens`, {
@@ -100,6 +112,11 @@ async function main() {
 
     if (!proxyHosts.length) {
       console.log("❗ Nessun proxy host trovato.");
+      return;
+    }
+
+    if (opts.listDomains || process.argv.length <= 2) {
+      listDomains(proxyHosts);
       return;
     }
 
