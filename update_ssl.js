@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const axios = require("axios");
 const { program } = require("commander");
 const inquirer = require("inquirer");
