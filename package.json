@@ -1,26 +1,39 @@
 {
   "name": "npm-ssl-updater",
   "version": "1.0.0",
-  "description": "Script CLI per aggiornare automaticamente le impostazioni SSL nei proxy host di Nginx Proxy Manager",
+  "description": "CLI to harden Nginx Proxy Manager proxy hosts with Force SSL, HTTP/2, HSTS, and related options",
   "main": "update_ssl.js",
   "bin": {
     "npm-ssl-updater": "./bin/update.js"
   },
+  "files": [
+    "bin/",
+    "update_ssl.js",
+    "README.en.md",
+    "README.it.md",
+    "LICENSE",
+    ".env.example"
+  ],
   "scripts": {
-    "start": "node update_ssl.js"
+    "start": "node update_ssl.js",
+    "test": "node --test"
   },
   "keywords": [
     "nginx-proxy-manager",
     "ssl",
     "cli",
-    "automation"
+    "automation",
+    "hsts",
+    "http2",
+    "reverse-proxy"
   ],
   "author": "Alessandro Digilio",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "axios": "^1.6.0",
     "commander": "^11.0.0",
-    "dotenv": "^17.2.1",
-    "inquirer": "^8.0.0"
+    "dotenv": "^17.3.1"
   }
 }

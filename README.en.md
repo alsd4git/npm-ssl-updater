@@ -24,7 +24,7 @@ npm install -g .
 
 You can create a `.env` file in the project root to store your credentials:
 
-```
+```env
 NPM_HOST=http://localhost:81
 NPM_EMAIL=admin@example.com
 NPM_PASSWORD=changeme
@@ -57,15 +57,31 @@ npm-ssl-updater \
   --cache-assets \
   --block-exploits \
   --enable-websockets \
+  --request-timeout 15000 \
   --print-advanced # (optional) shows advanced configuration
 ```
 
 Available aliases for flags:
+
 - `-l`, `--list-domains`: shows the list of configured domains
 - `--hsts-subdomains`: `--hsd`
 - `--cache-assets`: `--ca`
 - `--block-exploits`: `--bce`
 - `--enable-websockets`: `--ws`
+- `--yes`: `-y`
+
+### Non-interactive apply
+
+Use `--yes` to apply every pending change without prompts. This is the safest mode for automation and cron jobs.
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --block-exploits \
+  --yes
+```
 
 ### View Only (dry-run)
 
@@ -82,7 +98,9 @@ npm-ssl-updater \
 - Shows the current status of security options
 - Compares with proposed changes
 - Supports interactive mode with confirmation (`yes`, `no`, `all`)
+- Supports safe non-interactive execution with `--yes`
 - Supports `--dry-run` for viewing without modifying
+- Uses explicit request timeouts to avoid hanging forever on unhealthy NPM instances
 - Supports extra options:
   - `--cache-assets`: enables caching for static assets
   - `--block-exploits`: activates protection against common exploits (with integrated intelligence)
@@ -94,7 +112,7 @@ npm-ssl-updater \
 
 Some services (e.g., authentication or admin panels) may break if "Block Common Exploits" is enabled.
 
-The script includes an array of keywords that, if present in the domain, prevent `block_exploits` from being forced.
+The script includes an array of keywords that, if present in any configured domain, prevent `block_exploits` from being forced.
 
 You can modify it in the `update_ssl.js` file:
 
@@ -109,7 +127,7 @@ const blockExploitsExceptions = [
 
 ## ✅ Example output
 
-```
+```bash
 🔧 Proxy: example.duckdns.org
 🔁 ssl_forced              : ❌ → ✅
 🔁 http2_support           : ❌ → ✅
@@ -119,7 +137,7 @@ const blockExploitsExceptions = [
    caching_enabled         : ❌ → ❌
 🔁 allow_websocket_upgrade : ❌ → ✅
 Apply changes? ([y]es / [n]o / [a]ll): y
-   → ✅ Change applied
+   Change applied.
 ```
 
 ## 🛡 Requirements

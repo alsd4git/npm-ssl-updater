@@ -24,7 +24,7 @@ npm install -g .
 
 È possibile creare un file `.env` nella root del progetto per memorizzare le credenziali:
 
-```
+```env
 NPM_HOST=http://localhost:81
 NPM_EMAIL=admin@example.com
 NPM_PASSWORD=changeme
@@ -57,16 +57,31 @@ npm-ssl-updater \
   --cache-assets \
   --block-exploits \
   --enable-websockets \
+  --request-timeout 15000 \
   --print-advanced # (opzionale) mostra la configurazione avanzata
 ```
 
-
 Alias disponibili per i flag:
+
 - `-l`, `--list-domains`: mostra la lista dei domini configurati
 - `--hsts-subdomains`: `--hsd`
 - `--cache-assets`: `--ca`
 - `--block-exploits`: `--bce`
 - `--enable-websockets`: `--ws`
+- `--yes`: `-y`
+
+### Applicazione non interattiva
+
+Usa `--yes` per applicare tutte le modifiche pendenti senza prompt. È la modalità consigliata per automazioni e cron job.
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --block-exploits \
+  --yes
+```
 
 ### Solo visualizzazione (dry-run)
 
@@ -82,8 +97,10 @@ npm-ssl-updater \
 
 - Mostra lo stato attuale delle opzioni di sicurezza
 - Confronta con le modifiche proposte
-- Supporta modalità interattiva con conferma (`sì`, `no`, `tutti`)
+- Supporta modalità interattiva con conferma (`yes`, `no`, `all`)
+- Supporta esecuzione non interattiva sicura con `--yes`
 - Supporta `--dry-run` per visualizzare senza modificare
+- Usa timeout espliciti sulle richieste per evitare blocchi indefiniti verso istanze NPM non sane
 - Supporta opzioni extra:
   - `--cache-assets`: abilita cache per asset statici
   - `--block-exploits`: attiva protezione contro exploit comuni (con intelligenza integrata)
@@ -95,7 +112,7 @@ npm-ssl-updater \
 
 Alcuni servizi (es. autenticazione o admin panel) possono rompersi se "Block Common Exploits" è abilitato.
 
-Lo script include un array di parole chiave che, se presenti nel dominio, evitano di forzare `block_exploits`.
+Lo script include un array di parole chiave che, se presenti in qualunque dominio configurato, evitano di forzare `block_exploits`.
 
 Puoi modificarlo nel file `update_ssl.js`:
 
@@ -110,7 +127,7 @@ const blockExploitsExceptions = [
 
 ## ✅ Esempio output
 
-```
+```bash
 🔧 Proxy: example.duckdns.org
 🔁 ssl_forced              : ❌ → ✅
 🔁 http2_support           : ❌ → ✅
@@ -119,8 +136,8 @@ const blockExploitsExceptions = [
    block_exploits          : ✅ → ✅
    caching_enabled         : ❌ → ❌
 🔁 allow_websocket_upgrade : ❌ → ✅
-Applico modifiche? ([s]ì / [n]o / [t]utti): s
-   → ✅ Modifica applicata
+Apply changes? ([y]es / [n]o / [a]ll): y
+   Change applied.
 ```
 
 ## 🛡 Requisiti
