@@ -39,9 +39,6 @@ const UPDATABLE_PROXY_HOST_FIELDS = [
 ];
 const BLOCK_EXPLOITS_EXCEPTIONS = [
   "tinyauth",
-  "vaultls",
-  "pocket-id",
-  "watchyourlan",
 ];
 
 program

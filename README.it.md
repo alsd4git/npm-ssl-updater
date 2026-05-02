@@ -105,24 +105,18 @@ npm-ssl-updater \
   - `--cache-assets`: abilita cache per asset statici
   - `--block-exploits`: attiva protezione contro exploit comuni (con intelligenza integrata)
   - `--enable-websockets`: attiva il supporto WebSocket
-- Disattiva automaticamente `--block-exploits` per host noti incompatibili:
-  - `tinyauth`, `vaultls`, `pocket-id`, `watchyourlan`
+- Mantiene `--block-exploits` disattivato solo per `tinyauth`, perché Tinyauth si basa su forwarded host e query parameters dietro NPM.
 
 ## 🔧 Esclusione automatica da `--block-exploits`
 
 Alcuni servizi (es. autenticazione o admin panel) possono rompersi se "Block Common Exploits" è abilitato.
 
-Lo script include un array di parole chiave che, se presenti in qualunque dominio configurato, evitano di forzare `block_exploits`.
+Lo script salta `block_exploits` solo per `tinyauth`, perché Tinyauth ha bisogno di forwarded host e query parameters integri dietro NPM.
 
 Puoi modificarlo nel file `update_ssl.js`:
 
 ```js
-const blockExploitsExceptions = [
-  'tinyauth',
-  'vaultls',
-  'pocket-id',
-  'watchyourlan'
-];
+const blockExploitsExceptions = ['tinyauth'];
 ```
 
 ## ✅ Esempio output

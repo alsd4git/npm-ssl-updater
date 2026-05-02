@@ -76,7 +76,8 @@ test("resolveOptions merges environment credentials and validates them", () => {
 });
 
 test("shouldSkipBlockExploits checks every domain name case-insensitively", () => {
-  assert.equal(shouldSkipBlockExploits(["safe.example.com", "Pocket-ID.example.com"]), true);
+  assert.equal(shouldSkipBlockExploits(["safe.example.com", "Tinyauth.example.com"]), true);
+  assert.equal(shouldSkipBlockExploits(["safe.example.com", "Pocket-ID.example.com"]), false);
   assert.equal(shouldSkipBlockExploits(["safe.example.com"]), false);
 });
 
