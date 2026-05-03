@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  buildAdvancedConfigUpdatePayload,
   buildUpdatePayload,
   diffSecurityState,
   getDesiredSecurityState,
@@ -122,7 +123,17 @@ test("buildUpdatePayload preserves supported host fields and sanitizes locations
   assert.equal(payload.trust_forwarded_proto, true);
   assert.deepEqual(payload.meta, host.meta);
   assert.equal("owner" in payload, false);
+  assert.equal("advanced_config" in payload, false);
   assert.deepEqual(payload.locations[0], sanitizeLocation(host.locations[0]));
+});
+
+test("buildAdvancedConfigUpdatePayload emits a minimal snippet-only payload", () => {
+  assert.deepEqual(buildAdvancedConfigUpdatePayload("proxy_set_header X-Real-IP $remote_addr;"), {
+    advanced_config: "proxy_set_header X-Real-IP $remote_addr;",
+  });
+  assert.deepEqual(buildAdvancedConfigUpdatePayload(null), {
+    advanced_config: "",
+  });
 });
 
 test("diffSecurityState reports only changed security fields", () => {

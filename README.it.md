@@ -93,6 +93,23 @@ npm-ssl-updater \
   --dry-run
 ```
 
+### Aggiornare `advanced_config` di un host specifico
+
+Quando devi aggiornare solo lo snippet `advanced_config` di un proxy host, usa il percorso dedicato con payload minimale:
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --advanced-config-host-id 36 \
+  --advanced-config-file ./media/NPM-extraconf.conf
+```
+
+È disponibile anche `--advanced-config-dry-run` per verificare il file senza applicare modifiche.
+
+Questo helper esiste perché alcuni host NPM possono ignorare `advanced_config` quando il payload di update è troppo grande o include campi non necessari. Il percorso dedicato manda solo lo snippet avanzato, riducendo il rischio di regressioni.
+
 ## ✨ Cosa fa
 
 - Mostra lo stato attuale delle opzioni di sicurezza
@@ -101,6 +118,7 @@ npm-ssl-updater \
 - Supporta esecuzione non interattiva sicura con `--yes`
 - Supporta `--dry-run` per visualizzare senza modificare
 - Usa timeout espliciti sulle richieste per evitare blocchi indefiniti verso istanze NPM non sane
+- Supporta un helper dedicato per aggiornare `advanced_config` di un singolo host con payload minimale
 - Supporta opzioni extra:
   - `--cache-assets`: abilita cache per asset statici
   - `--block-exploits`: attiva protezione contro exploit comuni (con intelligenza integrata)
@@ -117,6 +135,17 @@ Puoi modificarlo nel file `update_ssl.js`:
 
 ```js
 const blockExploitsExceptions = ['tinyauth'];
+```
+
+Per gli snippet `advanced_config`, usa il percorso dedicato:
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --advanced-config-host-id 36 \
+  --advanced-config-file ./media/NPM-extraconf.conf
 ```
 
 ## ✅ Esempio output

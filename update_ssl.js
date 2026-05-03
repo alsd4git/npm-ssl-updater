@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 require("dotenv").config({ quiet: true });
 
+const { readFile } = require("node:fs/promises");
 const { createInterface } = require("node:readline/promises");
 const { stdin, stdout, stderr, exit, argv, env } = require("node:process");
 const { URL } = require("node:url");
@@ -32,7 +33,6 @@ const UPDATABLE_PROXY_HOST_FIELDS = [
   "caching_enabled",
   "allow_websocket_upgrade",
   "access_list_id",
-  "advanced_config",
   "enabled",
   "meta",
   "locations",
@@ -55,6 +55,10 @@ program
   .option("-y, --yes", "Apply all pending changes without interactive confirmation", false)
   .option("--dry-run", "Show what would change without applying modifications", false)
   .option("--print-advanced", "Show the advanced_config section for each host", false)
+  .option("--advanced-config-host-id <id>", "Update advanced_config for a single host ID", (value) =>
+    parsePositiveInteger(value, "--advanced-config-host-id"))
+  .option("--advanced-config-file <path>", "Path to a file containing the advanced_config snippet")
+  .option("--advanced-config-dry-run", "Preview the advanced_config update without applying it", false)
   .option("-l, --list-domains", "Show a list of configured domains and their targets", false)
   .option(
     "--request-timeout <ms>",
@@ -182,6 +186,12 @@ function sanitizeLocation(location) {
   };
 }
 
+function buildAdvancedConfigUpdatePayload(advancedConfig) {
+  return {
+    advanced_config: String(advancedConfig ?? ""),
+  };
+}
+
 function buildUpdatePayload(host, updatedFields) {
   const basePayload = pick(host, UPDATABLE_PROXY_HOST_FIELDS);
 
@@ -190,7 +200,6 @@ function buildUpdatePayload(host, updatedFields) {
     ...updatedFields,
     access_list_id: host.access_list_id ?? 0,
     certificate_id: host.certificate_id ?? 0,
-    advanced_config: host.advanced_config || "",
     enabled: host.enabled ?? true,
     trust_forwarded_proto: toBoolean(host.trust_forwarded_proto),
     meta: host.meta && typeof host.meta === "object" ? { ...host.meta } : {},
@@ -347,6 +356,33 @@ async function updateProxyHost(options, token, hostId, payload) {
   );
 }
 
+async function readAdvancedConfigFile(filePath) {
+  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+    throw new Error("Advanced config file path cannot be empty.");
+  }
+
+  return readFile(filePath, "utf8");
+}
+
+function findProxyHostById(proxyHosts, hostId) {
+  return proxyHosts.find((host) => host && host.id === hostId) || null;
+}
+
+async function updateAdvancedConfig(options, token, hostId, advancedConfig) {
+  return requestJson(
+    `${options.host}/api/nginx/proxy-hosts/${hostId}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(buildAdvancedConfigUpdatePayload(advancedConfig)),
+    },
+    options.requestTimeout,
+  );
+}
+
 async function askForConfirmation() {
   if (!stdin.isTTY || !stdout.isTTY) {
     throw new Error("Interactive confirmation requires a TTY. Re-run with --yes or --dry-run.");
@@ -369,12 +405,61 @@ async function askForConfirmation() {
   }
 }
 
+async function runAdvancedConfigUpdate(rawOptions = program.opts(), environment = env) {
+  const options = resolveOptions(rawOptions, environment);
+  const hostId = parsePositiveInteger(rawOptions.hostId, "--host-id");
+  const advancedConfig = await readAdvancedConfigFile(rawOptions.file);
+  const token = await login(options);
+  const proxyHosts = await fetchProxyHosts(options, token);
+  const host = findProxyHostById(proxyHosts, hostId);
+
+  if (!host) {
+    throw new Error(`Proxy host ${hostId} not found.`);
+  }
+
+  const displayName = Array.isArray(host.domain_names) && host.domain_names.length > 0 ? host.domain_names.join(", ") : `host ${hostId}`;
+
+  if (host.advanced_config === advancedConfig) {
+    console.log(`Already compliant: ${displayName}`);
+    return;
+  }
+
+  console.log(`\nAdvanced config: ${displayName}`);
+  console.log("--------------------------------------------------");
+  console.log(`Source file: ${rawOptions.file}`);
+  console.log(`Current size: ${String(host.advanced_config || "").length} chars`);
+  console.log(`New size    : ${advancedConfig.length} chars`);
+  console.log("--------------------------------------------------");
+
+  if (rawOptions.dryRun) {
+    console.log("   Dry-run mode: no changes applied.");
+    return;
+  }
+
+  await updateAdvancedConfig(options, token, hostId, advancedConfig);
+  console.log("   Change applied.");
+}
+
 async function run(rawOptions = program.opts(), environment = env) {
   if (argv.length <= 2 && !environment.NPM_HOST && !environment.NPM_EMAIL && !environment.NPM_PASSWORD) {
     program.help();
   }
 
   const options = resolveOptions(rawOptions, environment);
+
+  if (options.advancedConfigHostId || options.advancedConfigFile) {
+    await runAdvancedConfigUpdate(
+      {
+        ...options,
+        hostId: options.advancedConfigHostId,
+        file: options.advancedConfigFile,
+        dryRun: options.advancedConfigDryRun,
+      },
+      environment,
+    );
+    return;
+  }
+
   const token = await login(options);
   const proxyHosts = await fetchProxyHosts(options, token);
 
@@ -463,7 +548,9 @@ module.exports = {
   SECURITY_FIELDS,
   UPDATABLE_PROXY_HOST_FIELDS,
   buildUpdatePayload,
+  buildAdvancedConfigUpdatePayload,
   diffSecurityState,
+  findProxyHostById,
   getDesiredSecurityState,
   listDomains,
   normalizeHostUrl,
@@ -471,6 +558,8 @@ module.exports = {
   requestJson,
   resolveOptions,
   run,
+  runAdvancedConfigUpdate,
   sanitizeLocation,
   shouldSkipBlockExploits,
+  updateAdvancedConfig,
 };
