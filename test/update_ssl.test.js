@@ -8,7 +8,9 @@ const {
   diffSecurityState,
   getDesiredSecurityState,
   findBestCertificate,
+  findBestAccessList,
   findProxyHostByDomain,
+  describeAccessList,
   normalizeHostUrl,
   describeCertificate,
   parsePositiveInteger,
@@ -188,6 +190,29 @@ test("describeCertificate and findProxyHostByDomain summarize NPM objects", () =
   assert.equal(findProxyHostByDomain(hosts, "missing.example.com"), null);
 });
 
+test("findBestAccessList prefers exact access list name matches", () => {
+  const accessLists = [
+    { id: 1, name: "local-only", proxy_host_count: 36, satisfy_any: true, pass_auth: false },
+    { id: 2, name: "vpn-only", proxy_host_count: 4, satisfy_any: false, pass_auth: false },
+  ];
+
+  assert.equal(findBestAccessList(accessLists, "LOCAL-ONLY")?.id, 1);
+  assert.equal(findBestAccessList(accessLists, "missing"), null);
+});
+
+test("describeAccessList summarizes NPM access list objects", () => {
+  assert.match(
+    describeAccessList({
+      id: 1,
+      name: "local-only",
+      proxy_host_count: 36,
+      satisfy_any: true,
+      pass_auth: false,
+    }),
+    /local-only.*id 1.*satisfy_any.*auth.*hosts 36/,
+  );
+});
+
 test("buildProxyHostPayload sets hardened defaults and preserves existing host metadata", () => {
   const payload = buildProxyHostPayload({
     domainName: "app.example.com",
@@ -213,8 +238,8 @@ test("buildProxyHostPayload sets hardened defaults and preserves existing host m
   assert.equal(payload.block_exploits, true);
   assert.equal(payload.caching_enabled, false);
   assert.equal(payload.allow_websocket_upgrade, true);
-  assert.equal(payload.enabled, true);
-  assert.equal(payload.access_list_id, 0);
+  assert.equal(payload.enabled, false);
+  assert.equal(payload.access_list_id, 12);
   assert.deepEqual(payload.meta, { keep: true });
   assert.deepEqual(payload.locations[0], {
     id: 1,

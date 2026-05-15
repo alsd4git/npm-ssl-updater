@@ -79,6 +79,16 @@ program
     "--proxy-certificate-domain <domain>",
     "Certificate domain hint for the proxy host, defaults to the proxy domain",
   )
+  .option("--list-access-lists", "Show a list of configured access lists", false)
+  .option(
+    "--proxy-access-list-id <id>",
+    "Use a specific access list ID for the proxy host",
+    (value) => parsePositiveInteger(value, "--proxy-access-list-id"),
+  )
+  .option(
+    "--proxy-access-list-name <name>",
+    "Access list name hint for the proxy host, defaults to local-only or another custom list name",
+  )
   .option("--proxy-advanced-config-file <path>", "Path to a proxy host advanced_config snippet")
   .option("--proxy-dry-run", "Preview the proxy host update without applying it", false)
   .option("-l, --list-domains", "Show a list of configured domains and their targets", false)
@@ -228,9 +238,9 @@ function buildUpdatePayload(host, updatedFields) {
   return {
     ...basePayload,
     ...updatedFields,
-    access_list_id: host.access_list_id ?? 0,
-    certificate_id: host.certificate_id ?? 0,
-    enabled: host.enabled ?? true,
+    access_list_id: updatedFields.access_list_id ?? host.access_list_id ?? 0,
+    certificate_id: updatedFields.certificate_id ?? host.certificate_id ?? 0,
+    enabled: updatedFields.enabled ?? host.enabled ?? true,
     trust_forwarded_proto: toBoolean(host.trust_forwarded_proto),
     meta: host.meta && typeof host.meta === "object" ? { ...host.meta } : {},
     locations: Array.isArray(host.locations) ? host.locations.map(sanitizeLocation) : [],
@@ -390,6 +400,25 @@ async function fetchCertificates(options, token) {
   return response;
 }
 
+async function fetchAccessLists(options, token) {
+  const response = await requestJson(
+    `${options.host}/api/nginx/access-lists`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    options.requestTimeout,
+  );
+
+  if (!Array.isArray(response)) {
+    throw new Error("Unexpected API response: access list list is not an array.");
+  }
+
+  return response;
+}
+
 async function updateProxyHost(options, token, hostId, payload) {
   return requestJson(
     `${options.host}/api/nginx/proxy-hosts/${hostId}`,
@@ -449,6 +478,10 @@ function validateProxyHostSelection(rawOptions) {
   if (rawOptions.proxyAdvancedConfigFile && !rawOptions.proxyAdvancedConfigFile.trim()) {
     throw new Error("--proxy-advanced-config-file cannot be empty.");
   }
+
+  if (rawOptions.proxyAccessListId !== undefined && rawOptions.proxyAccessListName !== undefined) {
+    throw new Error("Use either --proxy-access-list-id or --proxy-access-list-name, not both.");
+  }
 }
 
 function findProxyHostById(proxyHosts, hostId) {
@@ -478,6 +511,32 @@ function findProxyHostByDomain(proxyHosts, domainName) {
       Array.isArray(host?.domain_names) &&
       host.domain_names.some((domain) => normalizeDomain(domain) === normalizedTarget),
     ) || null
+  );
+}
+
+function parseAccessListSelection(rawOptions) {
+  if (rawOptions.proxyAccessListId !== undefined) {
+    return {
+      accessListId: rawOptions.proxyAccessListId,
+      accessListName: null,
+    };
+  }
+
+  return {
+    accessListId: null,
+    accessListName: rawOptions.proxyAccessListName || null,
+  };
+}
+
+function findBestAccessList(accessLists, candidateName) {
+  const normalizedTarget = normalizeDomain(candidateName);
+
+  if (!normalizedTarget) {
+    return null;
+  }
+
+  return (
+    accessLists.find((accessList) => normalizeDomain(accessList?.name) === normalizedTarget) || null
   );
 }
 
@@ -568,12 +627,35 @@ function listCertificates(certificates) {
   console.log("--------------------------------------------------");
 }
 
+function describeAccessList(accessList) {
+  const name = accessList?.name || `access list ${accessList?.id ?? "unknown"}`;
+  const details = [
+    accessList?.satisfy_any ? "satisfy_any" : "all",
+    accessList?.pass_auth ? "pass_auth" : "auth",
+    `hosts ${accessList?.proxy_host_count ?? 0}`,
+  ];
+
+  return `${name} [id ${accessList?.id ?? "?"}, ${details.join(", ")}]`;
+}
+
+function listAccessLists(accessLists) {
+  console.log("Configured access lists:");
+  console.log("--------------------------------------------------");
+
+  for (const accessList of accessLists) {
+    console.log(` - ${describeAccessList(accessList)}`);
+  }
+
+  console.log("--------------------------------------------------");
+}
+
 function buildProxyHostPayload({
   domainName,
   forwardScheme,
   forwardHost,
   forwardPort,
   certificateId,
+  accessListId,
   existingHost,
 }) {
   const baseHost = existingHost || {
@@ -590,6 +672,7 @@ function buildProxyHostPayload({
     forward_host: forwardHost,
     forward_port: forwardPort,
     certificate_id: certificateId ?? 0,
+    access_list_id: accessListId ?? baseHost.access_list_id ?? 0,
     ssl_forced: true,
     hsts_enabled: true,
     hsts_subdomains: true,
@@ -598,15 +681,14 @@ function buildProxyHostPayload({
     block_exploits: true,
     caching_enabled: false,
     allow_websocket_upgrade: true,
-    access_list_id: 0,
-    enabled: true,
+    enabled: baseHost.enabled ?? true,
   });
 
   return {
     ...payload,
     certificate_id: certificateId ?? 0,
-    access_list_id: 0,
-    enabled: true,
+    access_list_id: accessListId ?? baseHost.access_list_id ?? 0,
+    enabled: baseHost.enabled ?? true,
   };
 }
 
@@ -622,6 +704,30 @@ function parseCertificateSelection(rawOptions) {
     certificateId: null,
     certificateDomain: rawOptions.proxyCertificateDomain || rawOptions.proxyDomain || null,
   };
+}
+
+async function resolveProxyHostAccessList(options, token, rawOptions) {
+  const { accessListId, accessListName } = parseAccessListSelection(rawOptions);
+
+  const accessLists = await fetchAccessLists(options, token);
+
+  if (accessListId !== null) {
+    const selectedAccessList = accessLists.find((accessList) => accessList.id === accessListId);
+
+    if (!selectedAccessList) {
+      throw new Error(`Access list ${accessListId} not found.`);
+    }
+
+    return selectedAccessList;
+  }
+
+  const selectedAccessList = findBestAccessList(accessLists, accessListName);
+
+  if (!selectedAccessList && accessListName) {
+    console.warn(`Warning: no matching access list found for ${accessListName}. The proxy host will keep its current access list unless you pass --proxy-access-list-id.`);
+  }
+
+  return selectedAccessList;
 }
 
 async function resolveProxyHostCertificate(options, token, rawOptions) {
@@ -674,13 +780,16 @@ async function runProxyHostUpsert(rawOptions = program.opts(), environment = env
   const proxyHosts = await fetchProxyHosts(options, token);
   const existingHost = findProxyHostByDomain(proxyHosts, proxyDomain);
   const selectedCertificate = await resolveProxyHostCertificate(options, token, rawOptions);
+  const selectedAccessList = await resolveProxyHostAccessList(options, token, rawOptions);
   const certificateId = selectedCertificate?.id ?? 0;
+  const accessListId = selectedAccessList?.id ?? (existingHost?.access_list_id ?? 0);
   const payload = buildProxyHostPayload({
     domainName: proxyDomain,
     forwardScheme,
     forwardHost,
     forwardPort,
     certificateId,
+    accessListId,
     existingHost,
   });
 
@@ -695,6 +804,7 @@ async function runProxyHostUpsert(rawOptions = program.opts(), environment = env
   console.log(`Domain       : ${proxyDomain}`);
   console.log(`Forward      : ${forwardScheme}://${forwardHost}:${forwardPort}`);
   console.log(`Certificate  : ${selectedCertificate ? describeCertificate(selectedCertificate) : "<none>"}`);
+  console.log(`Access list  : ${selectedAccessList ? describeAccessList(selectedAccessList) : existingHost?.access_list_id ? `id ${existingHost.access_list_id}` : "<none>"}`);
   console.log(`Create mode  : ${existingHost ? "update" : "create"}`);
   console.log("--------------------------------------------------");
 
@@ -827,6 +937,16 @@ async function run(rawOptions = program.opts(), environment = env) {
   }
 
   const token = await login(options);
+  if (options.listAccessLists) {
+    const accessLists = await fetchAccessLists(options, token);
+    if (accessLists.length === 0) {
+      console.log("No access lists found.");
+      return;
+    }
+    listAccessLists(accessLists);
+    return;
+  }
+
   const proxyHosts = await fetchProxyHosts(options, token);
 
   if (proxyHosts.length === 0) {
@@ -918,12 +1038,15 @@ module.exports = {
   buildProxyHostPayload,
   diffSecurityState,
   describeCertificate,
+  describeAccessList,
   findProxyHostById,
   findProxyHostByDomain,
   findBestCertificate,
+  findBestAccessList,
   getDesiredSecurityState,
   listDomains,
   listCertificates,
+  listAccessLists,
   normalizeHostUrl,
   normalizeCertificateDomain,
   parsePositiveInteger,
@@ -937,4 +1060,5 @@ module.exports = {
   validateAdvancedConfigSelection,
   validateProxyHostSelection,
   updateAdvancedConfig,
+  fetchAccessLists,
 };

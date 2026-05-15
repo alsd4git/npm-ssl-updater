@@ -124,6 +124,20 @@ npm-ssl-updater \
 
 This is useful when you want to recover an existing certificate ID or verify which wildcard cert covers a host.
 
+### List access lists
+
+You can inspect the access lists already stored in Nginx Proxy Manager with:
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --list-access-lists
+```
+
+This is useful when you want to recover a named access list such as `local-only` and reuse it on a proxy host.
+
 ### Proxy host helper
 
 When you want to create or update a proxy host, use the dedicated helper. It automatically looks up a matching certificate in NPM by domain name and wildcard coverage. You can still override the certificate with `--proxy-certificate-id` if needed.
@@ -148,6 +162,8 @@ Available proxy-host flags:
 - `--proxy-forward-scheme`: upstream scheme, defaults to `http`
 - `--proxy-certificate-id`: force a specific certificate ID
 - `--proxy-certificate-domain`: use a different domain hint when auto-selecting a certificate
+- `--proxy-access-list-id`: force a specific access list ID
+- `--proxy-access-list-name`: use a named access list, for example `local-only`
 - `--proxy-advanced-config-file`: apply an `advanced_config` snippet after the host is created or updated
 - `--proxy-dry-run`: preview the host operation without applying changes
 
