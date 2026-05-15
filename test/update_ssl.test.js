@@ -3,14 +3,20 @@ const assert = require("node:assert/strict");
 
 const {
   buildAdvancedConfigUpdatePayload,
+  buildProxyHostPayload,
   buildUpdatePayload,
   diffSecurityState,
   getDesiredSecurityState,
+  findBestCertificate,
+  findProxyHostByDomain,
   normalizeHostUrl,
+  describeCertificate,
   parsePositiveInteger,
   resolveOptions,
   sanitizeLocation,
   shouldSkipBlockExploits,
+  validateAdvancedConfigSelection,
+  validateProxyHostSelection,
 } = require("../update_ssl");
 
 function createHost(overrides = {}) {
@@ -128,12 +134,126 @@ test("buildUpdatePayload preserves supported host fields and sanitizes locations
 });
 
 test("buildAdvancedConfigUpdatePayload emits a minimal snippet-only payload", () => {
-  assert.deepEqual(buildAdvancedConfigUpdatePayload("proxy_set_header X-Real-IP $remote_addr;"), {
+  assert.deepEqual(buildAdvancedConfigUpdatePayload("proxy_set_header X-Real-IP $remote_addr;\r\n"), {
     advanced_config: "proxy_set_header X-Real-IP $remote_addr;",
   });
   assert.deepEqual(buildAdvancedConfigUpdatePayload(null), {
     advanced_config: "",
   });
+});
+
+test("findBestCertificate prefers exact matches over wildcard matches and newer expiry on ties", () => {
+  const certificates = [
+    {
+      id: 10,
+      domain_names: ["*.example.com"],
+      expires_on: "2026-06-01 00:00:00",
+      nice_name: "wildcard",
+    },
+    {
+      id: 11,
+      domain_names: ["forgejo.example.com"],
+      expires_on: "2026-05-01 00:00:00",
+      nice_name: "exact",
+    },
+    {
+      id: 12,
+      domain_names: ["forgejo.example.com"],
+      expires_on: "2027-05-01 00:00:00",
+      nice_name: "exact newer",
+    },
+  ];
+
+  assert.equal(findBestCertificate(certificates, ["forgejo.example.com"])?.id, 12);
+  assert.equal(findBestCertificate(certificates, ["other.example.com"])?.id, 10);
+  assert.equal(findBestCertificate(certificates, ["missing.example.net"]), null);
+});
+
+test("describeCertificate and findProxyHostByDomain summarize NPM objects", () => {
+  assert.match(
+    describeCertificate({
+      id: 16,
+      domain_names: ["keepingyousafe.myaddr.tools"],
+      expires_on: "2026-08-07 15:29:36",
+    }),
+    /keepingyousafe\.myaddr\.tools.*id 16/,
+  );
+
+  const hosts = [
+    { id: 1, domain_names: ["example.com"] },
+    { id: 2, domain_names: ["FORGEJO.EXAMPLE.COM"] },
+  ];
+
+  assert.equal(findProxyHostByDomain(hosts, "forgejo.example.com")?.id, 2);
+  assert.equal(findProxyHostByDomain(hosts, "missing.example.com"), null);
+});
+
+test("buildProxyHostPayload sets hardened defaults and preserves existing host metadata", () => {
+  const payload = buildProxyHostPayload({
+    domainName: "forgejo.example.com",
+    forwardScheme: "http",
+    forwardHost: "forgejo",
+    forwardPort: 3000,
+    certificateId: 10,
+    existingHost: createHost({
+      access_list_id: 12,
+      enabled: false,
+      meta: { keep: true },
+      locations: [{ id: 1, path: "/", forward_scheme: "http", forward_host: "forgejo", forward_port: 3000 }],
+    }),
+  });
+
+  assert.deepEqual(payload.domain_names, ["forgejo.example.com"]);
+  assert.equal(payload.forward_host, "forgejo");
+  assert.equal(payload.forward_port, 3000);
+  assert.equal(payload.certificate_id, 10);
+  assert.equal(payload.ssl_forced, true);
+  assert.equal(payload.hsts_enabled, true);
+  assert.equal(payload.hsts_subdomains, true);
+  assert.equal(payload.block_exploits, true);
+  assert.equal(payload.caching_enabled, false);
+  assert.equal(payload.allow_websocket_upgrade, true);
+  assert.equal(payload.enabled, true);
+  assert.equal(payload.access_list_id, 0);
+  assert.deepEqual(payload.meta, { keep: true });
+  assert.deepEqual(payload.locations[0], {
+    id: 1,
+    path: "/",
+    forward_scheme: "http",
+    forward_host: "forgejo",
+    forward_port: 3000,
+    forward_path: "",
+    advanced_config: "",
+  });
+});
+
+test("validateAdvancedConfigSelection requires the host id and file path together", () => {
+  assert.doesNotThrow(() =>
+    validateAdvancedConfigSelection({
+      advancedConfigHostId: 36,
+      advancedConfigFile: "./media/NPM-extraconf.conf",
+    }),
+  );
+  assert.throws(
+    () =>
+      validateAdvancedConfigSelection({
+        advancedConfigHostId: 36,
+      }),
+    /must be provided together/,
+  );
+  assert.throws(
+    () =>
+      validateAdvancedConfigSelection({
+        advancedConfigFile: "./media/NPM-extraconf.conf",
+      }),
+    /must be provided together/,
+  );
+});
+
+test("validateProxyHostSelection requires the proxy domain when proxy mode is enabled", () => {
+  assert.doesNotThrow(() => validateProxyHostSelection({ upsertProxyHost: false }));
+  assert.doesNotThrow(() => validateProxyHostSelection({ upsertProxyHost: true, proxyDomain: "forgejo.example.com" }));
+  assert.throws(() => validateProxyHostSelection({ upsertProxyHost: true }), /proxy-domain/);
 });
 
 test("diffSecurityState reports only changed security fields", () => {

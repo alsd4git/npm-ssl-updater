@@ -110,6 +110,47 @@ npm-ssl-updater \
 
 This helper exists because some NPM hosts can ignore `advanced_config` when the update payload is too large or includes fields that are unnecessary for the snippet. The dedicated path sends only the advanced snippet, reducing the chance of regressions.
 
+### List certificates
+
+You can inspect the certificates already stored in Nginx Proxy Manager with:
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --list-certificates
+```
+
+This is useful when you want to recover an existing certificate ID or verify which wildcard cert covers a host.
+
+### Proxy host helper
+
+When you want to create or update a proxy host, use the dedicated helper. It automatically looks up a matching certificate in NPM by domain name and wildcard coverage. You can still override the certificate with `--proxy-certificate-id` if needed.
+
+```bash
+npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password changeme \
+  --upsert-proxy-host \
+  --proxy-domain forgejo.example.com \
+  --proxy-forward-host forgejo \
+  --proxy-forward-port 3000 \
+  --proxy-advanced-config-file ./forgejo/NPM-extraconf.conf
+```
+
+Available proxy-host flags:
+
+- `--proxy-domain`: public hostname for the proxy host
+- `--proxy-forward-host`: upstream container host, defaults to `forgejo`
+- `--proxy-forward-port`: upstream port, defaults to `3000`
+- `--proxy-forward-scheme`: upstream scheme, defaults to `http`
+- `--proxy-certificate-id`: force a specific certificate ID
+- `--proxy-certificate-domain`: use a different domain hint when auto-selecting a certificate
+- `--proxy-advanced-config-file`: apply an `advanced_config` snippet after the host is created or updated
+- `--proxy-dry-run`: preview the host operation without applying changes
+
 ## ✨ What it does
 
 - Shows the current status of security options

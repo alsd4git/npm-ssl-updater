@@ -59,6 +59,28 @@ program
     parsePositiveInteger(value, "--advanced-config-host-id"))
   .option("--advanced-config-file <path>", "Path to a file containing the advanced_config snippet")
   .option("--advanced-config-dry-run", "Preview the advanced_config update without applying it", false)
+  .option("--list-certificates", "Show a list of configured SSL certificates", false)
+  .option("--upsert-proxy-host", "Create or update a proxy host with a matching certificate", false)
+  .option("--proxy-domain <domain>", "Public proxy host domain, for example forgejo.example.com")
+  .option("--proxy-forward-host <host>", "Proxy upstream host", "forgejo")
+  .option(
+    "--proxy-forward-port <port>",
+    "Proxy upstream port",
+    (value) => parsePositiveInteger(value, "--proxy-forward-port"),
+    3000,
+  )
+  .option("--proxy-forward-scheme <scheme>", "Proxy upstream scheme", "http")
+  .option(
+    "--proxy-certificate-id <id>",
+    "Use a specific certificate ID for the proxy host",
+    (value) => parsePositiveInteger(value, "--proxy-certificate-id"),
+  )
+  .option(
+    "--proxy-certificate-domain <domain>",
+    "Certificate domain hint for the proxy host, defaults to the proxy domain",
+  )
+  .option("--proxy-advanced-config-file <path>", "Path to a proxy host advanced_config snippet")
+  .option("--proxy-dry-run", "Preview the proxy host update without applying it", false)
   .option("-l, --list-domains", "Show a list of configured domains and their targets", false)
   .option(
     "--request-timeout <ms>",
@@ -186,9 +208,17 @@ function sanitizeLocation(location) {
   };
 }
 
+function normalizeCertificateDomain(domain) {
+  return normalizeDomain(domain);
+}
+
+function normalizeAdvancedConfigSnippet(advancedConfig) {
+  return String(advancedConfig ?? "").replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+}
+
 function buildAdvancedConfigUpdatePayload(advancedConfig) {
   return {
-    advanced_config: String(advancedConfig ?? ""),
+    advanced_config: normalizeAdvancedConfigSnippet(advancedConfig),
   };
 }
 
@@ -341,11 +371,45 @@ async function fetchProxyHosts(options, token) {
   return response;
 }
 
+async function fetchCertificates(options, token) {
+  const response = await requestJson(
+    `${options.host}/api/nginx/certificates`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+    options.requestTimeout,
+  );
+
+  if (!Array.isArray(response)) {
+    throw new Error("Unexpected API response: certificate list is not an array.");
+  }
+
+  return response;
+}
+
 async function updateProxyHost(options, token, hostId, payload) {
   return requestJson(
     `${options.host}/api/nginx/proxy-hosts/${hostId}`,
     {
       method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+    options.requestTimeout,
+  );
+}
+
+async function createProxyHost(options, token, payload) {
+  return requestJson(
+    `${options.host}/api/nginx/proxy-hosts`,
+    {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -362,6 +426,29 @@ async function readAdvancedConfigFile(filePath) {
   }
 
   return readFile(filePath, "utf8");
+}
+
+function validateAdvancedConfigSelection(rawOptions) {
+  const hasHostId = rawOptions.advancedConfigHostId !== undefined;
+  const hasFile = rawOptions.advancedConfigFile !== undefined;
+
+  if (hasHostId !== hasFile) {
+    throw new Error("Both --advanced-config-host-id and --advanced-config-file must be provided together.");
+  }
+}
+
+function validateProxyHostSelection(rawOptions) {
+  if (!rawOptions.upsertProxyHost) {
+    return;
+  }
+
+  if (!rawOptions.proxyDomain) {
+    throw new Error("--proxy-domain must be provided when using --upsert-proxy-host.");
+  }
+
+  if (rawOptions.proxyAdvancedConfigFile && !rawOptions.proxyAdvancedConfigFile.trim()) {
+    throw new Error("--proxy-advanced-config-file cannot be empty.");
+  }
 }
 
 function findProxyHostById(proxyHosts, hostId) {
@@ -381,6 +468,265 @@ async function updateAdvancedConfig(options, token, hostId, advancedConfig) {
     },
     options.requestTimeout,
   );
+}
+
+function findProxyHostByDomain(proxyHosts, domainName) {
+  const normalizedTarget = normalizeDomain(domainName);
+
+  return (
+    proxyHosts.find((host) =>
+      Array.isArray(host?.domain_names) &&
+      host.domain_names.some((domain) => normalizeDomain(domain) === normalizedTarget),
+    ) || null
+  );
+}
+
+function parseCertificateExpiresOn(value) {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function certificateDomainMatchScore(certificateDomain, targetDomain) {
+  const normalizedCertificateDomain = normalizeCertificateDomain(certificateDomain);
+  const normalizedTargetDomain = normalizeDomain(targetDomain);
+
+  if (!normalizedCertificateDomain || !normalizedTargetDomain) {
+    return 0;
+  }
+
+  if (normalizedCertificateDomain === normalizedTargetDomain) {
+    return 3;
+  }
+
+  if (!normalizedCertificateDomain.startsWith("*.")) {
+    return 0;
+  }
+
+  const wildcardSuffix = normalizedCertificateDomain.slice(2);
+  if (!wildcardSuffix || !normalizedTargetDomain.endsWith(`.${wildcardSuffix}`)) {
+    return 0;
+  }
+
+  const targetLabels = normalizedTargetDomain.split(".").length;
+  const suffixLabels = wildcardSuffix.split(".").length;
+
+  return targetLabels === suffixLabels + 1 ? 2 : 0;
+}
+
+function findBestCertificate(certificates, candidateDomains) {
+  let bestCertificate = null;
+  let bestScore = 0;
+  let bestExpiresOn = 0;
+
+  for (const certificate of certificates) {
+    const certificateDomains = Array.isArray(certificate?.domain_names) ? certificate.domain_names : [];
+    let certificateScore = 0;
+
+    for (const candidateDomain of candidateDomains) {
+      for (const certificateDomain of certificateDomains) {
+        certificateScore = Math.max(certificateScore, certificateDomainMatchScore(certificateDomain, candidateDomain));
+      }
+    }
+
+    if (certificateScore === 0) {
+      continue;
+    }
+
+    const expiresOn = parseCertificateExpiresOn(certificate.expires_on);
+    if (
+      certificateScore > bestScore ||
+      (certificateScore === bestScore && expiresOn > bestExpiresOn) ||
+      (certificateScore === bestScore && expiresOn === bestExpiresOn && (certificate.id ?? 0) < (bestCertificate?.id ?? Number.MAX_SAFE_INTEGER))
+    ) {
+      bestCertificate = certificate;
+      bestScore = certificateScore;
+      bestExpiresOn = expiresOn;
+    }
+  }
+
+  return bestCertificate;
+}
+
+function describeCertificate(certificate) {
+  const domains = Array.isArray(certificate?.domain_names) && certificate.domain_names.length > 0
+    ? certificate.domain_names.join(", ")
+    : certificate?.nice_name || `certificate ${certificate?.id ?? "unknown"}`;
+
+  const expiresOn = certificate?.expires_on ? `expires ${certificate.expires_on}` : "no expiry date";
+
+  return `${domains} [id ${certificate?.id ?? "?"}, ${expiresOn}]`;
+}
+
+function listCertificates(certificates) {
+  console.log("Configured certificates:");
+  console.log("--------------------------------------------------");
+
+  for (const certificate of certificates) {
+    console.log(` - ${describeCertificate(certificate)}`);
+  }
+
+  console.log("--------------------------------------------------");
+}
+
+function buildProxyHostPayload({
+  domainName,
+  forwardScheme,
+  forwardHost,
+  forwardPort,
+  certificateId,
+  existingHost,
+}) {
+  const baseHost = existingHost || {
+    access_list_id: 0,
+    enabled: true,
+    meta: {},
+    locations: [],
+    trust_forwarded_proto: true,
+  };
+
+  const payload = buildUpdatePayload(baseHost, {
+    domain_names: [domainName],
+    forward_scheme: forwardScheme,
+    forward_host: forwardHost,
+    forward_port: forwardPort,
+    certificate_id: certificateId ?? 0,
+    ssl_forced: true,
+    hsts_enabled: true,
+    hsts_subdomains: true,
+    trust_forwarded_proto: true,
+    http2_support: true,
+    block_exploits: true,
+    caching_enabled: false,
+    allow_websocket_upgrade: true,
+    access_list_id: 0,
+    enabled: true,
+  });
+
+  return {
+    ...payload,
+    certificate_id: certificateId ?? 0,
+    access_list_id: 0,
+    enabled: true,
+  };
+}
+
+function parseCertificateSelection(rawOptions) {
+  if (rawOptions.proxyCertificateId !== undefined) {
+    return {
+      certificateId: rawOptions.proxyCertificateId,
+      certificateDomain: null,
+    };
+  }
+
+  return {
+    certificateId: null,
+    certificateDomain: rawOptions.proxyCertificateDomain || rawOptions.proxyDomain || null,
+  };
+}
+
+async function resolveProxyHostCertificate(options, token, rawOptions) {
+  const { certificateId, certificateDomain } = parseCertificateSelection(rawOptions);
+
+  if (certificateId !== null) {
+    const certificates = await fetchCertificates(options, token);
+    const selectedCertificate = certificates.find((certificate) => certificate.id === certificateId);
+
+    if (!selectedCertificate) {
+      throw new Error(`Certificate ${certificateId} not found.`);
+    }
+
+    return selectedCertificate;
+  }
+
+  const certificates = await fetchCertificates(options, token);
+  const candidateDomains = [certificateDomain, rawOptions.proxyDomain].filter(Boolean);
+  const selectedCertificate = findBestCertificate(certificates, candidateDomains);
+
+  if (!selectedCertificate) {
+    console.warn(
+      `Warning: no matching certificate found for ${candidateDomains.join(", ")}. The proxy host will be created without a certificate unless you pass --proxy-certificate-id.`,
+    );
+  }
+
+  return selectedCertificate;
+}
+
+async function runProxyHostUpsert(rawOptions = program.opts(), environment = env) {
+  const options = resolveOptions(rawOptions, environment);
+  const proxyDomain = normalizeDomain(rawOptions.proxyDomain);
+  const forwardHost = String(rawOptions.proxyForwardHost || "").trim();
+  const forwardPort = parsePositiveInteger(rawOptions.proxyForwardPort, "--proxy-forward-port");
+  const forwardScheme = String(rawOptions.proxyForwardScheme || "http").trim().toLowerCase();
+
+  if (!proxyDomain) {
+    throw new Error("--proxy-domain is required.");
+  }
+
+  if (!forwardHost) {
+    throw new Error("--proxy-forward-host is required.");
+  }
+
+  if (!["http", "https"].includes(forwardScheme)) {
+    throw new Error("--proxy-forward-scheme must be http or https.");
+  }
+
+  const token = await login(options);
+  const proxyHosts = await fetchProxyHosts(options, token);
+  const existingHost = findProxyHostByDomain(proxyHosts, proxyDomain);
+  const selectedCertificate = await resolveProxyHostCertificate(options, token, rawOptions);
+  const certificateId = selectedCertificate?.id ?? 0;
+  const payload = buildProxyHostPayload({
+    domainName: proxyDomain,
+    forwardScheme,
+    forwardHost,
+    forwardPort,
+    certificateId,
+    existingHost,
+  });
+
+  const advancedConfig = rawOptions.proxyAdvancedConfigFile
+    ? normalizeAdvancedConfigSnippet(await readAdvancedConfigFile(rawOptions.proxyAdvancedConfigFile))
+    : null;
+
+  const displayName = existingHost ? existingHost.domain_names.join(", ") : proxyDomain;
+
+  console.log(`\nProxy host: ${displayName}`);
+  console.log("--------------------------------------------------");
+  console.log(`Domain       : ${proxyDomain}`);
+  console.log(`Forward      : ${forwardScheme}://${forwardHost}:${forwardPort}`);
+  console.log(`Certificate  : ${selectedCertificate ? describeCertificate(selectedCertificate) : "<none>"}`);
+  console.log(`Create mode  : ${existingHost ? "update" : "create"}`);
+  console.log("--------------------------------------------------");
+
+  if (rawOptions.proxyDryRun) {
+    console.log("   Dry-run mode: no changes applied.");
+    return;
+  }
+
+  let hostId = existingHost?.id ?? null;
+
+  if (hostId !== null) {
+    await updateProxyHost(options, token, hostId, payload);
+  } else {
+    const created = await createProxyHost(options, token, payload);
+    hostId = created?.id ?? null;
+
+    if (hostId === null) {
+      const refreshedHosts = await fetchProxyHosts(options, token);
+      const refreshedHost = findProxyHostByDomain(refreshedHosts, proxyDomain);
+      hostId = refreshedHost?.id ?? null;
+    }
+  }
+
+  if (hostId === null) {
+    throw new Error("Proxy host was created, but its ID could not be determined.");
+  }
+
+  if (advancedConfig !== null) {
+    await updateAdvancedConfig(options, token, hostId, advancedConfig);
+  }
+
+  console.log("   Change applied.");
 }
 
 async function askForConfirmation() {
@@ -408,7 +754,7 @@ async function askForConfirmation() {
 async function runAdvancedConfigUpdate(rawOptions = program.opts(), environment = env) {
   const options = resolveOptions(rawOptions, environment);
   const hostId = parsePositiveInteger(rawOptions.hostId, "--host-id");
-  const advancedConfig = await readAdvancedConfigFile(rawOptions.file);
+  const advancedConfig = normalizeAdvancedConfigSnippet(await readAdvancedConfigFile(rawOptions.file));
   const token = await login(options);
   const proxyHosts = await fetchProxyHosts(options, token);
   const host = findProxyHostById(proxyHosts, hostId);
@@ -418,8 +764,9 @@ async function runAdvancedConfigUpdate(rawOptions = program.opts(), environment 
   }
 
   const displayName = Array.isArray(host.domain_names) && host.domain_names.length > 0 ? host.domain_names.join(", ") : `host ${hostId}`;
+  const currentAdvancedConfig = normalizeAdvancedConfigSnippet(host.advanced_config);
 
-  if (host.advanced_config === advancedConfig) {
+  if (currentAdvancedConfig === advancedConfig) {
     console.log(`Already compliant: ${displayName}`);
     return;
   }
@@ -427,7 +774,7 @@ async function runAdvancedConfigUpdate(rawOptions = program.opts(), environment 
   console.log(`\nAdvanced config: ${displayName}`);
   console.log("--------------------------------------------------");
   console.log(`Source file: ${rawOptions.file}`);
-  console.log(`Current size: ${String(host.advanced_config || "").length} chars`);
+  console.log(`Current size: ${currentAdvancedConfig.length} chars`);
   console.log(`New size    : ${advancedConfig.length} chars`);
   console.log("--------------------------------------------------");
 
@@ -447,7 +794,10 @@ async function run(rawOptions = program.opts(), environment = env) {
 
   const options = resolveOptions(rawOptions, environment);
 
-  if (options.advancedConfigHostId || options.advancedConfigFile) {
+  validateAdvancedConfigSelection(options);
+  validateProxyHostSelection(options);
+
+  if (options.advancedConfigHostId !== undefined) {
     await runAdvancedConfigUpdate(
       {
         ...options,
@@ -457,6 +807,22 @@ async function run(rawOptions = program.opts(), environment = env) {
       },
       environment,
     );
+    return;
+  }
+
+  if (options.listCertificates) {
+    const token = await login(options);
+    const certificates = await fetchCertificates(options, token);
+    if (certificates.length === 0) {
+      console.log("No certificates found.");
+      return;
+    }
+    listCertificates(certificates);
+    return;
+  }
+
+  if (options.upsertProxyHost) {
+    await runProxyHostUpsert(options, environment);
     return;
   }
 
@@ -549,17 +915,26 @@ module.exports = {
   UPDATABLE_PROXY_HOST_FIELDS,
   buildUpdatePayload,
   buildAdvancedConfigUpdatePayload,
+  buildProxyHostPayload,
   diffSecurityState,
+  describeCertificate,
   findProxyHostById,
+  findProxyHostByDomain,
+  findBestCertificate,
   getDesiredSecurityState,
   listDomains,
+  listCertificates,
   normalizeHostUrl,
+  normalizeCertificateDomain,
   parsePositiveInteger,
   requestJson,
   resolveOptions,
   run,
+  runProxyHostUpsert,
   runAdvancedConfigUpdate,
   sanitizeLocation,
   shouldSkipBlockExploits,
+  validateAdvancedConfigSelection,
+  validateProxyHostSelection,
   updateAdvancedConfig,
 };
