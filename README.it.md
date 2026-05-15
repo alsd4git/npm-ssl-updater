@@ -134,16 +134,16 @@ npm-ssl-updater \
   --email admin@example.com \
   --password changeme \
   --upsert-proxy-host \
-  --proxy-domain forgejo.example.com \
-  --proxy-forward-host forgejo \
+  --proxy-domain app.example.com \
+  --proxy-forward-host app \
   --proxy-forward-port 3000 \
-  --proxy-advanced-config-file ./forgejo/NPM-extraconf.conf
+  --proxy-advanced-config-file ./path/to/NPM-extraconf.conf
 ```
 
 Flag proxy host disponibili:
 
 - `--proxy-domain`: hostname pubblico del proxy host
-- `--proxy-forward-host`: host upstream del container, default `forgejo`
+- `--proxy-forward-host`: host upstream del container, default `app`
 - `--proxy-forward-port`: porta upstream, default `3000`
 - `--proxy-forward-scheme`: schema upstream, default `http`
 - `--proxy-certificate-id`: forza un ID certificato specifico

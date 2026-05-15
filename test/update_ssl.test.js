@@ -152,19 +152,19 @@ test("findBestCertificate prefers exact matches over wildcard matches and newer 
     },
     {
       id: 11,
-      domain_names: ["forgejo.example.com"],
+      domain_names: ["app.example.com"],
       expires_on: "2026-05-01 00:00:00",
       nice_name: "exact",
     },
     {
       id: 12,
-      domain_names: ["forgejo.example.com"],
+      domain_names: ["app.example.com"],
       expires_on: "2027-05-01 00:00:00",
       nice_name: "exact newer",
     },
   ];
 
-  assert.equal(findBestCertificate(certificates, ["forgejo.example.com"])?.id, 12);
+  assert.equal(findBestCertificate(certificates, ["app.example.com"])?.id, 12);
   assert.equal(findBestCertificate(certificates, ["other.example.com"])?.id, 10);
   assert.equal(findBestCertificate(certificates, ["missing.example.net"]), null);
 });
@@ -181,30 +181,30 @@ test("describeCertificate and findProxyHostByDomain summarize NPM objects", () =
 
   const hosts = [
     { id: 1, domain_names: ["example.com"] },
-    { id: 2, domain_names: ["FORGEJO.EXAMPLE.COM"] },
+    { id: 2, domain_names: ["APP.EXAMPLE.COM"] },
   ];
 
-  assert.equal(findProxyHostByDomain(hosts, "forgejo.example.com")?.id, 2);
+  assert.equal(findProxyHostByDomain(hosts, "app.example.com")?.id, 2);
   assert.equal(findProxyHostByDomain(hosts, "missing.example.com"), null);
 });
 
 test("buildProxyHostPayload sets hardened defaults and preserves existing host metadata", () => {
   const payload = buildProxyHostPayload({
-    domainName: "forgejo.example.com",
+    domainName: "app.example.com",
     forwardScheme: "http",
-    forwardHost: "forgejo",
+    forwardHost: "app",
     forwardPort: 3000,
     certificateId: 10,
     existingHost: createHost({
       access_list_id: 12,
       enabled: false,
       meta: { keep: true },
-      locations: [{ id: 1, path: "/", forward_scheme: "http", forward_host: "forgejo", forward_port: 3000 }],
+      locations: [{ id: 1, path: "/", forward_scheme: "http", forward_host: "app", forward_port: 3000 }],
     }),
   });
 
-  assert.deepEqual(payload.domain_names, ["forgejo.example.com"]);
-  assert.equal(payload.forward_host, "forgejo");
+  assert.deepEqual(payload.domain_names, ["app.example.com"]);
+  assert.equal(payload.forward_host, "app");
   assert.equal(payload.forward_port, 3000);
   assert.equal(payload.certificate_id, 10);
   assert.equal(payload.ssl_forced, true);
@@ -220,7 +220,7 @@ test("buildProxyHostPayload sets hardened defaults and preserves existing host m
     id: 1,
     path: "/",
     forward_scheme: "http",
-    forward_host: "forgejo",
+    forward_host: "app",
     forward_port: 3000,
     forward_path: "",
     advanced_config: "",
@@ -252,7 +252,7 @@ test("validateAdvancedConfigSelection requires the host id and file path togethe
 
 test("validateProxyHostSelection requires the proxy domain when proxy mode is enabled", () => {
   assert.doesNotThrow(() => validateProxyHostSelection({ upsertProxyHost: false }));
-  assert.doesNotThrow(() => validateProxyHostSelection({ upsertProxyHost: true, proxyDomain: "forgejo.example.com" }));
+  assert.doesNotThrow(() => validateProxyHostSelection({ upsertProxyHost: true, proxyDomain: "app.example.com" }));
   assert.throws(() => validateProxyHostSelection({ upsertProxyHost: true }), /proxy-domain/);
 });
 

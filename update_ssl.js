@@ -61,8 +61,8 @@ program
   .option("--advanced-config-dry-run", "Preview the advanced_config update without applying it", false)
   .option("--list-certificates", "Show a list of configured SSL certificates", false)
   .option("--upsert-proxy-host", "Create or update a proxy host with a matching certificate", false)
-  .option("--proxy-domain <domain>", "Public proxy host domain, for example forgejo.example.com")
-  .option("--proxy-forward-host <host>", "Proxy upstream host", "forgejo")
+  .option("--proxy-domain <domain>", "Public proxy host domain, for example app.example.com")
+  .option("--proxy-forward-host <host>", "Proxy upstream host", "app")
   .option(
     "--proxy-forward-port <port>",
     "Proxy upstream port",
