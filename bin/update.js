@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-require('../update_ssl');
+require("../update_ssl").runCli();

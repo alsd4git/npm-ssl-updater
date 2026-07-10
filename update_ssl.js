@@ -1063,11 +1063,15 @@ async function run(rawOptions = program.opts(), environment = env) {
   console.log(`\nCompleted. Updated ${changedHosts} host(s).`);
 }
 
-if (require.main === module) {
-  run().catch((error) => {
+function runCli() {
+  return run().catch((error) => {
     stderr.write(`Error: ${error.message}\n`);
     exit(1);
   });
+}
+
+if (require.main === module) {
+  runCli();
 }
 
 module.exports = {
@@ -1097,6 +1101,7 @@ module.exports = {
   resolveOptions,
   resolveRuntimeOptions,
   run,
+  runCli,
   runProxyHostUpsert,
   runAdvancedConfigUpdate,
   sanitizeLocation,
