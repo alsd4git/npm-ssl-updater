@@ -36,6 +36,24 @@ If the `.env` file is present, you don't need to pass the `--host`, `--email`, a
 
 **Important:** If the tool is installed globally, the `.env` file must be located in the directory from which you run the `npm-ssl-updater` command.
 
+### Credential safety
+
+Prefer `.env` (which is ignored by Git) or `--password-stdin` instead of
+`--password`: command-line arguments can be retained in shell history and be
+visible to other local processes. `--password` remains available for backwards
+compatibility.
+
+```bash
+printf '%s\n' "$NPM_PASSWORD" | npm-ssl-updater \
+  --host http://localhost:81 \
+  --email admin@example.com \
+  --password-stdin \
+  --dry-run
+```
+
+`--password-stdin` accepts exactly one newline-terminated password from a pipe
+or redirected file; it does not prompt on a terminal.
+
 ### Listing Domains
 
 Running the script without any arguments will display a list of all configured domains and their forward destinations.
@@ -52,7 +70,6 @@ This is the default behavior. You can also use the `--list-domains` or `-l` flag
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --hsts-subdomains \
   --cache-assets \
   --block-exploits \
@@ -78,7 +95,6 @@ Use `--yes` to apply every pending change without prompts. This is the safest mo
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --block-exploits \
   --yes
 ```
@@ -89,7 +105,6 @@ npm-ssl-updater \
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --dry-run
 ```
 
@@ -101,7 +116,6 @@ When you only need to update one proxy host's `advanced_config`, use the dedicat
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --advanced-config-host-id 36 \
   --advanced-config-file ./media/NPM-extraconf.conf
 ```
@@ -118,7 +132,6 @@ You can inspect the certificates already stored in Nginx Proxy Manager with:
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --list-certificates
 ```
 
@@ -132,7 +145,6 @@ You can inspect the access lists already stored in Nginx Proxy Manager with:
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --list-access-lists
 ```
 
@@ -146,7 +158,6 @@ When you want to create or update a proxy host, use the dedicated helper. It aut
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --upsert-proxy-host \
   --proxy-domain app.example.com \
   --proxy-forward-host app \
@@ -200,7 +211,6 @@ For `advanced_config` snippets, use the dedicated path:
 npm-ssl-updater \
   --host http://localhost:81 \
   --email admin@example.com \
-  --password changeme \
   --advanced-config-host-id 36 \
   --advanced-config-file ./media/NPM-extraconf.conf
 ```

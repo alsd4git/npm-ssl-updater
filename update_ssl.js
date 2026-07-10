@@ -48,6 +48,7 @@ program
   .option("-H, --host <url>", "NPM address (e.g., http://localhost:81)")
   .option("-e, --email <email>", "NPM admin email")
   .option("-p, --password <password>", "NPM admin password")
+  .option("--password-stdin", "Read the NPM admin password from standard input")
   .option("--hsts-subdomains, --hsd", "Enable HSTS for subdomains as well", false)
   .option("--cache-assets, --ca", "Enable static asset caching")
   .option("--block-exploits, --bce", "Block common exploits")
@@ -180,6 +181,47 @@ function resolveOptions(rawOptions, environment) {
     email: validateEmail(merged.email),
     password: validatePassword(merged.password),
   };
+}
+
+async function readPasswordFromStdin(input) {
+  if (input.isTTY) {
+    throw new Error("--password-stdin requires piped or redirected input.");
+  }
+
+  let password = "";
+  for await (const chunk of input) {
+    password += chunk;
+    if (password.length > 4096) {
+      throw new Error("Password from standard input is unexpectedly long.");
+    }
+  }
+
+  password = password.replace(/\r?\n$/, "");
+  if (password.includes("\n") || password.includes("\r")) {
+    throw new Error("Password from standard input must contain exactly one line.");
+  }
+
+  return validatePassword(password);
+}
+
+async function resolveRuntimeOptions(rawOptions, environment, input = stdin) {
+  const { passwordStdin, ...optionsWithoutPasswordStdin } = rawOptions;
+
+  if (!passwordStdin) {
+    return resolveOptions(optionsWithoutPasswordStdin, environment);
+  }
+
+  if (optionsWithoutPasswordStdin.password) {
+    throw new Error("Use either --password or --password-stdin, not both.");
+  }
+
+  return resolveOptions(
+    {
+      ...optionsWithoutPasswordStdin,
+      password: await readPasswordFromStdin(input),
+    },
+    environment,
+  );
 }
 
 function normalizeDomain(domain) {
@@ -902,7 +944,7 @@ async function run(rawOptions = program.opts(), environment = env) {
     program.help();
   }
 
-  const options = resolveOptions(rawOptions, environment);
+  const options = await resolveRuntimeOptions(rawOptions, environment);
 
   validateAdvancedConfigSelection(options);
   validateProxyHostSelection(options);
@@ -1051,7 +1093,9 @@ module.exports = {
   normalizeCertificateDomain,
   parsePositiveInteger,
   requestJson,
+  readPasswordFromStdin,
   resolveOptions,
+  resolveRuntimeOptions,
   run,
   runProxyHostUpsert,
   runAdvancedConfigUpdate,

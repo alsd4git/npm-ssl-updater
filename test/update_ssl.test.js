@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { Readable } = require("node:stream");
 
 const {
   buildAdvancedConfigUpdatePayload,
@@ -14,7 +15,9 @@ const {
   normalizeHostUrl,
   describeCertificate,
   parsePositiveInteger,
+  readPasswordFromStdin,
   resolveOptions,
+  resolveRuntimeOptions,
   sanitizeLocation,
   shouldSkipBlockExploits,
   validateAdvancedConfigSelection,
@@ -82,6 +85,49 @@ test("resolveOptions merges environment credentials and validates them", () => {
   assert.equal(options.host, "http://localhost:81");
   assert.equal(options.email, "admin@example.com");
   assert.equal(options.password, "secret");
+});
+
+test("readPasswordFromStdin accepts one newline-terminated password", async () => {
+  const password = await readPasswordFromStdin(Readable.from(["secret-from-stdin\n"]));
+  assert.equal(password, "secret-from-stdin");
+});
+
+test("readPasswordFromStdin rejects multiple lines", async () => {
+  await assert.rejects(
+    () => readPasswordFromStdin(Readable.from(["first\nsecond\n"])),
+    /exactly one line/,
+  );
+});
+
+test("resolveRuntimeOptions reads password from stdin without retaining the CLI flag", async () => {
+  const options = await resolveRuntimeOptions(
+    {
+      host: "http://localhost:81",
+      email: "admin@example.com",
+      passwordStdin: true,
+    },
+    {},
+    Readable.from(["secret\n"]),
+  );
+
+  assert.equal(options.password, "secret");
+  assert.equal("passwordStdin" in options, false);
+});
+
+test("resolveRuntimeOptions rejects ambiguous password sources", async () => {
+  await assert.rejects(
+    () => resolveRuntimeOptions(
+      {
+        host: "http://localhost:81",
+        email: "admin@example.com",
+        password: "secret",
+        passwordStdin: true,
+      },
+      {},
+      Readable.from(["other-secret\n"]),
+    ),
+    /either --password or --password-stdin/,
+  );
 });
 
 test("shouldSkipBlockExploits checks every domain name case-insensitively", () => {
