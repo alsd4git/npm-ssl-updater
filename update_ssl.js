@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-require("dotenv").config({ quiet: true });
-
 const { readFile } = require("node:fs/promises");
+const path = require("node:path");
 const { createInterface } = require("node:readline/promises");
 const { stdin, stdout, stderr, exit, argv, env } = require("node:process");
 const { URL } = require("node:url");
 const { program } = require("commander");
+const dotenv = require("dotenv");
 const packageJson = require("./package.json");
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -109,6 +109,16 @@ function parsePositiveInteger(value, optionName) {
   }
 
   return parsed;
+}
+
+function loadEnvironment({ cwd = process.cwd(), environment = env } = {}) {
+  dotenv.config({
+    path: path.join(cwd, ".env"),
+    processEnv: environment,
+    quiet: true,
+  });
+
+  return environment;
 }
 
 function normalizeHostUrl(input) {
@@ -1063,8 +1073,10 @@ async function run(rawOptions = program.opts(), environment = env) {
   console.log(`\nCompleted. Updated ${changedHosts} host(s).`);
 }
 
-function runCli() {
-  return run().catch((error) => {
+function runCli({ environment = env, loadEnv = loadEnvironment } = {}) {
+  const runtimeEnvironment = loadEnv({ environment });
+
+  return run(program.opts(), runtimeEnvironment).catch((error) => {
     stderr.write(`Error: ${error.message}\n`);
     exit(1);
   });
@@ -1093,6 +1105,7 @@ module.exports = {
   listDomains,
   listCertificates,
   listAccessLists,
+  loadEnvironment,
   normalizeHostUrl,
   normalizeCertificateDomain,
   parsePositiveInteger,

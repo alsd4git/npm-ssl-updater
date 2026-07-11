@@ -1,5 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { mkdtempSync, rmSync, writeFileSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const path = require("node:path");
 const { Readable } = require("node:stream");
 
 const {
@@ -8,6 +11,7 @@ const {
   buildUpdatePayload,
   diffSecurityState,
   getDesiredSecurityState,
+  loadEnvironment,
   findBestCertificate,
   findBestAccessList,
   findProxyHostByDomain,
@@ -85,6 +89,27 @@ test("resolveOptions merges environment credentials and validates them", () => {
   assert.equal(options.host, "http://localhost:81");
   assert.equal(options.email, "admin@example.com");
   assert.equal(options.password, "secret");
+});
+
+test("loadEnvironment reads only the requested working directory into the provided environment", () => {
+  const workingDirectory = mkdtempSync(path.join(tmpdir(), "npm-ssl-updater-env-"));
+  const environment = {};
+
+  try {
+    writeFileSync(
+      path.join(workingDirectory, ".env"),
+      "NPM_HOST=http://localhost:81\nNPM_EMAIL=admin@example.com\nNPM_PASSWORD=secret\n",
+    );
+
+    assert.equal(loadEnvironment({ cwd: workingDirectory, environment }), environment);
+    assert.deepEqual(environment, {
+      NPM_HOST: "http://localhost:81",
+      NPM_EMAIL: "admin@example.com",
+      NPM_PASSWORD: "secret",
+    });
+  } finally {
+    rmSync(workingDirectory, { recursive: true, force: true });
+  }
 });
 
 test("readPasswordFromStdin accepts one newline-terminated password", async () => {
