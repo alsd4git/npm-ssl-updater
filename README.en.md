@@ -1,14 +1,17 @@
-# 🔐 npm-ssl-updater
+# 🔐 Nginx Proxy Manager SSL CLI
 
 [Versione italiana](README.it.md)
 
 > Automatically updates security settings for all configured proxy hosts in [Nginx Proxy Manager](https://github.com/NginxProxyManager/nginx-proxy-manager).
 
+> Formerly **npm-ssl-updater**. The published package and command retain that
+> name for backward compatibility.
+
 ## 📦 Installation
 
 ```bash
-git clone https://github.com/alsd4git/npm-ssl-updater.git
-cd npm-ssl-updater
+git clone https://github.com/alsd4git/nginx-proxy-manager-ssl-cli.git
+cd nginx-proxy-manager-ssl-cli
 npm install
 ```
 
