@@ -62,7 +62,12 @@ test("npm package includes the executable and runtime files", () => {
 
   assert.equal(result.status, 0, result.stderr);
 
-  const [packageMetadata] = JSON.parse(result.stdout);
+  const packResult = JSON.parse(result.stdout);
+  const packageMetadata = Array.isArray(packResult)
+    ? packResult[0]
+    : Object.values(packResult)[0];
+  assert.ok(packageMetadata, "npm pack did not return package metadata");
+  assert.ok(Array.isArray(packageMetadata.files), "npm pack metadata has no file list");
   const packagedFiles = packageMetadata.files.map(({ path: filePath }) => filePath);
 
   assert.ok(packagedFiles.includes("bin/update.js"));
